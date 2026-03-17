@@ -98,13 +98,11 @@ set(LIBYOSYS_PATH ${YOSYS_DIR}/libyosys.so)
 add_library(libyosys SHARED IMPORTED)
 set_target_properties(libyosys PROPERTIES IMPORTED_LOCATION ${LIBYOSYS_PATH})
 
-# * Git clone the Verilog-VCD-Parser repo at build time
 set(LIB_VCD_PARSER_NAME libverilog-vcd-parser.a)
 set(VCD_PARSER_PATCH_CMAKE vcd_parser_patch.cmake)
 ExternalProject_Add(
     vcd-parser
     GIT_REPOSITORY https://github.com/ben-marshall/verilog-vcd-parser.git
-    # GIT_TAG yosys-0.35
     GIT_PROGRESS TRUE
     PREFIX engines
     BUILD_IN_SOURCE 1
@@ -113,10 +111,18 @@ ExternalProject_Add(
     UPDATE_COMMAND ""
     UPDATE_DISCONNECTED TRUE
     PATCH_COMMAND ${CMAKE_COMMAND} -P ${PATCH_DIR}/${VCD_PARSER_PATCH_CMAKE}
-    BUILD_COMMAND $(MAKE) all
+    # On newer macOS SDKs, the standalone Makefile build of vcd-parser
+    # may not inherit the correct SDK, causing standard headers like
+    # <string> / <cerrno> to be missing.  Use CMake -E env to inject
+    # SDKROOT and the same compilers that the top-level project uses.
+    BUILD_COMMAND
+        ${CMAKE_COMMAND} -E env
+            SDKROOT=${CMAKE_OSX_SYSROOT}
+            CC=${CMAKE_C_COMPILER}
+            CXX=${CMAKE_CXX_COMPILER}
+        $(MAKE) all
     LOG_CONFIGURE ON
     LOG_INSTALL ON
-    # LOG_BUILD ON
 )
 ExternalProject_Get_Property(vcd-parser SOURCE_DIR)
 set(VCD_PARSER_DIR ${SOURCE_DIR})
@@ -226,7 +232,7 @@ target_link_libraries(${CMAKE_PROJECT_NAME} glucose)
 set(YOSYS_PLUGIN_PATH src/ext/)
 add_subdirectory(${YOSYS_PLUGIN_PATH})
 
-# Allow GV to be built only after all steps in the External project are completed
+# Allow GV to be built only after all steps in the External projects are completed
 add_dependencies(${CMAKE_PROJECT_NAME} engine-yosys)
 add_dependencies(${CMAKE_PROJECT_NAME} engine-abc)
 add_dependencies(${CMAKE_PROJECT_NAME} vcd-parser)

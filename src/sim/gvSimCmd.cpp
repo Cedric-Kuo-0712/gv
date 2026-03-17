@@ -176,7 +176,7 @@ GVCmdExecStatus GVRandomSimCmd::exec(const string& option) {
 
 void GVRandomSimCmd::usage(const bool& verbose) const {
     gvMsg(GV_MSG_IFO)
-        << "Usage: RAndom Sim <-input file_name.v> [sim_cycle num_cycle_sim] "
+        << "Usage: RAndom Sim <-input file_name.v> [-sim_cycle num_cycle_sim] "
            "[-rst rst_name] [-rst_n rst_n_name] [-clk clk_name] "
            "[-output out_file_name] [-v verbose print result] [-file stimulus]"
         << endl;

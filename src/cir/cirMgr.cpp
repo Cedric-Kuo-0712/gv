@@ -48,6 +48,8 @@ bool CirMgr::readCircuitNew() {
         _abcMgr->initCir(_fileType);
         _abcMgr->travPreprocess();
         _abcMgr->giaToCir(_fileType, id2Name);
+        // Build fanout information and DFS list for the constructed netlist.
+        genConnections();
         genDfsList();
     } else if (_fileType == VERILOG) {
         params.fTechMap = 1;
@@ -61,6 +63,8 @@ bool CirMgr::readCircuitNew() {
         _abcMgr->initCir(_fileType);
         _abcMgr->travPreprocess();
         _abcMgr->giaToCir(_fileType, id2Name);
+        // Build fanout information and DFS list for the constructed netlist.
+        genConnections();
         genDfsList();
     }
     return true;
@@ -120,6 +124,43 @@ void CirMgr::deleteCircuit() {
     // delete _const1;
     //   delete _const0;
     //   _const0 = new CirConstGate(0);
+}
+
+void CirMgr::genConnections() {
+    // Rebuild fanout lists from the current netlist fanin information.
+    // Allocate one vector per gate id in _totGateList.
+    if (_fanoutInfo) {
+        delete[] _fanoutInfo;
+        _fanoutInfo = 0;
+    }
+
+    const size_t nTots = _totGateList.size();
+    if (nTots == 0) return;
+
+    _fanoutInfo = new GateVec[nTots];
+
+    for (size_t i = 0; i < nTots; ++i) {
+        CirGate* g = _totGateList[i];
+        if (!g) continue;
+
+        // For each gate, look at its fanins and register this gate as their fanout.
+        if (g->getNumFanins() >= 1) {
+            CirGateV in0 = g->getIn0();
+            CirGate* fi0 = in0.gate();
+            if (fi0) {
+                unsigned fid = fi0->getGid();
+                if (fid < nTots) _fanoutInfo[fid].push_back(g);
+            }
+        }
+        if (g->getNumFanins() >= 2) {
+            CirGateV in1 = g->getIn1();
+            CirGate* fi1 = in1.gate();
+            if (fi1) {
+                unsigned fid = fi1->getGid();
+                if (fid < nTots) _fanoutInfo[fid].push_back(g);
+            }
+        }
+    }
 }
 
 void CirMgr::genDfsList() {
