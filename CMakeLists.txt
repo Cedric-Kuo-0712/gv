@@ -186,6 +186,7 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/fmtlib/fmt.git
     GIT_TAG 10.2.1)
 FetchContent_MakeAvailable(fmt)
+find_package(fmt) # for installed version of fmt
 
 # * Glucose
 FetchContent_Declare(
