@@ -7,6 +7,9 @@
 #include <iostream>
 #include <string>
 #include <vector>
+
+#include "sim_random_compile_config.h"
+
 USING_YOSYS_NAMESPACE
 PRIVATE_NAMESPACE_BEGIN
 
@@ -35,17 +38,20 @@ struct randomSim : public Pass {
         log("    		The reset_n name of the verilog file you want to simulate\n");
         log("    		Default to be \"reset_n\"\n");
         log("    		reset when reset_n = 0\n");
-        log("    		Only one of reset and reset_n should be set\n");
+        log("    [-continue]\n");
+        log("    		Continue from previous cycle and state\n");
+        log("    		Only one of reset, reset_n and continue should be set\n");
         log("    [-output]\n");
         log("    		The name of output file which contains the simulation result\n");
-        log("    [-v]\n");
-        log("    		verbose print the result of simulation on the command line\n");
+        log("    [-Verbose_printing_results]\n");
+        log("    		verbose print the result of simulation on the command line (also supports -V)\n");
     }
     void execute(std::vector<std::string> args, Design* design) override {
         int sim_cycle = 20, property = -1;
         size_t argidx, num_inputs = 0;
         bool reset_set = false, property_set = false;
         bool reset_n_set = false;
+        bool continue_set = false;
         bool clk_set = false;
         bool verbose = false, verilog_file_name_set = false;
         bool output_file_set = false, top_module_name_set = false, stimulus = false;
@@ -67,11 +73,21 @@ struct randomSim : public Pass {
             if (args[argidx] == "-reset" && argidx + 1 < args.size()) {
                 reset_name = args[++argidx];
                 reset_set = true;
+                if ((reset_set ? 1 : 0) + (reset_n_set ? 1 : 0) + (continue_set ? 1 : 0) > 1)
+                    log_error("Only one of -reset, -reset_n and -continue should be set\n");
                 continue;
             }
             if (args[argidx] == "-reset_n" && argidx + 1 < args.size() && reset_set == false) {
                 reset_n_name = args[++argidx];
                 reset_n_set = true;
+                if ((reset_set ? 1 : 0) + (reset_n_set ? 1 : 0) + (continue_set ? 1 : 0) > 1)
+                    log_error("Only one of -reset, -reset_n and -continue should be set\n");
+                continue;
+            }
+            if (args[argidx] == "-continue" || args[argidx] == "-Continue") {
+                continue_set = true;
+                if ((reset_set ? 1 : 0) + (reset_n_set ? 1 : 0) + (continue_set ? 1 : 0) > 1)
+                    log_error("Only one of -reset, -reset_n and -continue should be set\n");
                 continue;
             }
             if (args[argidx] == "-clk" && argidx + 1 < args.size()) {
@@ -79,8 +95,12 @@ struct randomSim : public Pass {
                 clk_set = true;
                 continue;
             }
-            if (args[argidx] == "-v") {
-                verbose = true;
+            if (args[argidx].rfind("-V", 0) == 0) {
+                // "-V" is mandatory substring, and the suffix "erbose_printing_results" is optional.
+                // Supported examples: "-V", "-Verbose_printing_results".
+                std::string suffix = args[argidx].substr(2); // after "-V"
+                if (suffix.empty() || suffix == "erbose_printing_results")
+                    verbose = true;
                 continue;
             }
             if (args[argidx] == "-file" && argidx + 1 < args.size()) {
@@ -134,6 +154,8 @@ struct randomSim : public Pass {
         ofs << "#include <stdlib.h>\n";
         ofs << "#include <time.h>\n";
         ofs << "#include <math.h>\n";
+        ofs << "#include <sstream>\n";
+        ofs << "#include <unordered_map>\n";
         ofs << "#include <vector>\n";
         ofs << "#include <backends/cxxrtl/cxxrtl_vcd.h>\n";
         module_name = log_id(design->top_module()->name);
@@ -182,6 +204,49 @@ struct randomSim : public Pass {
             ofs << "ofs.open(\"" << output_file_name << "\");\n";
         }
         ofs << "     cxxrtl_design::p_" + module_name + " top;\n";
+        ofs << "long long base_cycle = 0;\n";
+        ofs << "const char* state_file = \".sim_state.txt\";\n";
+        ofs << "cxxrtl::debug_items state_items;\n";
+        ofs << "top.debug_info(state_items);\n";
+        if (continue_set) {
+            ofs << "std::unordered_map<std::string, cxxrtl::debug_item*> state_map;\n";
+            ofs << "for (auto &entry : state_items.table) {\n";
+            ofs << "    for (size_t part = 0; part < entry.second.size(); ++part) {\n";
+            ofs << "        auto *dbg = &entry.second[part];\n";
+            ofs << "        if (dbg->next == nullptr) continue;\n";
+            ofs << "        state_map[entry.first + \"#\" + std::to_string(part)] = dbg;\n";
+            ofs << "    }\n";
+            ofs << "}\n";
+            ofs << "std::ifstream state_ifs(state_file);\n";
+            ofs << "if (state_ifs.good()) {\n";
+            ofs << "    std::string line;\n";
+            ofs << "    while (std::getline(state_ifs, line)) {\n";
+            ofs << "        if (line.empty()) continue;\n";
+            ofs << "        std::istringstream iss(line);\n";
+            ofs << "        std::string key;\n";
+            ofs << "        iss >> key;\n";
+            ofs << "        if (key == \"__cycle__\") {\n";
+            ofs << "            iss >> base_cycle;\n";
+            ofs << "            continue;\n";
+            ofs << "        }\n";
+            ofs << "        auto it = state_map.find(key);\n";
+            ofs << "        if (it == state_map.end()) continue;\n";
+            ofs << "        cxxrtl::debug_item* item = it->second;\n";
+            ofs << "        if (item->next == nullptr) continue;\n";
+            ofs << "        size_t width = 0, chunks = 0;\n";
+            ofs << "        iss >> width >> chunks;\n";
+            ofs << "        if (width != item->width) continue;\n";
+            ofs << "        for (size_t c = 0; c < chunks; ++c) {\n";
+            ofs << "            std::string tok;\n";
+            ofs << "            if (!(iss >> tok)) break;\n";
+            ofs << "            uint32_t value = static_cast<uint32_t>(std::stoul(tok, nullptr, 16));\n";
+            ofs << "            item->curr[c] = value;\n";
+            ofs << "            item->next[c] = value;\n";
+            ofs << "        }\n";
+            ofs << "    }\n";
+            ofs << "}\n";
+            ofs << "state_ifs.close();\n";
+        }
         // For VCD file.
         if (vcd_file_set) {
             ofs << "cxxrtl::debug_items all_debug_items;\n";
@@ -193,15 +258,17 @@ struct randomSim : public Pass {
             ofs << "vcd.sample(0);\n";
         }
 
-        ofs << "top.step();\n";
+        if (!continue_set)
+            ofs << "top.step();\n";
         ofs << "for(int cycle=0;cycle<" << sim_cycle << ";++cycle){\n";
+        ofs << "long long display_cycle = base_cycle + cycle + 1;\n";
         ofs << "top.p_" << clk_name << ".set<bool>(false);\n";
         ofs << "top.step();\n";
 
         // For VCD file.
         if (vcd_file_set) ofs << "vcd.sample(cycle*2 + 0);\n";
 
-        if (reset_set || reset_n_set) {
+        if (!continue_set && (reset_set || reset_n_set)) {
             ofs << "if(cycle == 0)\n";
             if (reset_set) {
                 ofs << "	top.p_" << reset_name << ".set<bool>(true);\n";
@@ -215,7 +282,10 @@ struct randomSim : public Pass {
             }
         }
 
-        ofs << "if(cycle > 0)\n";
+        if (continue_set)
+            ofs << "if(cycle >= 0)\n";
+        else
+            ofs << "if(cycle > 0)\n";
         ofs << "{\n";
         ofs << "size_t idx = 0;\n";
         for (auto wire : design->top_module()->wires()) {
@@ -300,7 +370,7 @@ struct randomSim : public Pass {
         if (verbose) {
             ofs << "cout << \"==========================================\\n\";\n";
             ofs << "cout << \"= cycle \""
-                << " << cycle + 1 "
+                << " << display_cycle "
                 << "<< \"\\n\";\n";
             ofs << "cout << \"==========================================\\n\";\n";
             for (auto wire : design->top_module()->wires()) {
@@ -335,7 +405,7 @@ struct randomSim : public Pass {
         if (output_file_set) {
             ofs << "ofs << \"==========================================\\n\";\n";
             ofs << "ofs << \"= cycle \""
-                << " << cycle + 1 "
+                << " << display_cycle "
                 << "<< \"\\n\";\n";
             ofs << "ofs << \"==========================================\\n\";\n";
             for (auto wire : design->top_module()->wires()) {
@@ -350,6 +420,20 @@ struct randomSim : public Pass {
         }
 
         ofs << "}\n";
+        ofs << "std::ofstream state_ofs(state_file);\n";
+        ofs << "state_ofs << \"__cycle__ \" << (base_cycle + " << sim_cycle << ") << \"\\n\";\n";
+        ofs << "for (auto &entry : state_items.table) {\n";
+        ofs << "    for (size_t part = 0; part < entry.second.size(); ++part) {\n";
+        ofs << "        auto &item = entry.second[part];\n";
+        ofs << "        if (item.depth != 1 || item.curr == nullptr || item.next == nullptr) continue;\n";
+        ofs << "        size_t chunks = (item.width + 31) / 32;\n";
+        ofs << "        state_ofs << entry.first << \"#\" << part << \" \" << item.width << \" \" << chunks;\n";
+        ofs << "        for (size_t c = 0; c < chunks; ++c)\n";
+        ofs << "            state_ofs << \" \" << std::hex << item.curr[c] << std::dec;\n";
+        ofs << "        state_ofs << \"\\n\";\n";
+        ofs << "    }\n";
+        ofs << "}\n";
+        ofs << "state_ofs.close();\n";
         if (output_file_set) ofs << "ofs.close();\n";
         ofs << "}\n";
         ofs << "\n";
@@ -362,17 +446,24 @@ struct randomSim : public Pass {
         if (slashPos != std::string::npos)
             yosysConfig = yosysBin.substr(0, slashPos) + "/yosys-config";
 
-        std::string compileCmd =
-            " /opt/homebrew/opt/llvm/bin/clang++ -g -O3 -std=c++14 "
-            "-isysroot `xcrun --sdk macosx --show-sdk-path` "
-            "-I `" +
-            yosysConfig +
-            " --datdir`/include "
-            "-Wno-vla-cxx-extension -w "
-            ".sim_main.cpp -o .tb ";
+        // Must use the same toolchain as the GV build: bare "g++" may be Homebrew GCC without
+        // libc++ paths, while the project is often built with Apple or Homebrew Clang.
+        std::string compileCmd = "\"";
+        compileCmd += GV_RANDOM_SIM_CXX;
+        compileCmd += "\" -g -O3 -std=c++14 ";
+#ifdef __APPLE__
+        compileCmd += "-stdlib=libc++ ";
+#endif
+        compileCmd += "-I `" + yosysConfig + " --datdir`/include "
+                      "-w "
+                      ".sim_main.cpp -o .tb ";
 
-        run_command(compileCmd);
-        run_command(" ./.tb ");
+        int compileRet = run_command(compileCmd);
+        if (compileRet != 0)
+            log_error("random_sim failed: could not compile generated simulator (.sim_main.cpp).\n");
+        int simRet = run_command(" ./.tb ");
+        if (simRet != 0)
+            log_error("random_sim failed: simulator process exited abnormally (./.tb).\n");
     }
 } randomSim;
 

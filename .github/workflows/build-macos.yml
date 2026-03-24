@@ -28,7 +28,7 @@ jobs:
                       ${{ runner.os }}-${{ env.cache-name }}-
 
             - name: Install Dependencies
-              run: brew tap Homebrew/bundle && brew bundle
+              run: brew bundle --file=./Brewfile
 
             - name: Export the brew path
               run: |

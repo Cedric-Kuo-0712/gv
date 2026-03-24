@@ -4,6 +4,7 @@
 #include "gvCmdMgr.h"
 
 #include <cassert>
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
@@ -59,6 +60,21 @@ bool GVCmdExec::lexSingleOption(const string& option, string& token, bool option
     if (n != string::npos) {
         errorOption(GV_CMD_OPT_EXTRA, option.substr(n));
         return false;
+    }
+    return true;
+}
+
+bool GVCmdExec::checkOptionToken(const string& token, const string& optionPattern, size_t mandatoryLen) const {
+    // Mandatory prefix must exist; optional suffix may be omitted, but any provided
+    // characters must match the pattern exactly (case-insensitive).
+    if (mandatoryLen == 0) return false;
+    if (optionPattern.size() < mandatoryLen) return false;
+    if (token.size() < mandatoryLen || token.size() > optionPattern.size()) return false;
+
+    for (size_t i = 0; i < token.size(); ++i) {
+        unsigned char lhs = static_cast<unsigned char>(token[i]);
+        unsigned char rhs = static_cast<unsigned char>(optionPattern[i]);
+        if (tolower(lhs) != tolower(rhs)) return false;
     }
     return true;
 }

@@ -30,7 +30,7 @@ bool initSimCmd() {
 //  RAndom Sim
 //----------------------------------------------------------------------------
 GVCmdExecStatus GVRandomSimCmd::exec(const string& option) {
-    gvMsg(GV_MSG_IFO) << "I am GVRandomSimCmd " << endl;
+    // gvMsg(GV_MSG_IFO) << "I am GVRandomSimCmd " << endl;
 
     if (!cirMgr) {
         cout << "[ERROR]: Please use command \"CIRRead\" to read the input file first !!\n";
@@ -49,6 +49,7 @@ GVCmdExecStatus GVRandomSimCmd::exec(const string& option) {
     bool rstSet          = false;
     bool rstNSet         = false;
     bool clkSet          = false;
+    bool continueSet     = false;
     bool outFileSet      = false;
     bool inFileSet       = false;
     bool stimulusSet     = false;
@@ -69,28 +70,40 @@ GVCmdExecStatus GVRandomSimCmd::exec(const string& option) {
 
     for (size_t i = 0; i < n; ++i) {
         const string& token = options[i];
-        if (myStrNCmp("-v", token, 1) == 0) {
+        if (checkOptionToken(token, "-Verbose_printing_results", 2)) {
             verbose = true;
-            command += " -v";
+            // Pass canonical long option to random_sim plugin.
+            command += " -Verbose_printing_results";
             continue;
         }
-        if (myStrNCmp("-rst_n", token, 4) == 0) {
+        if (checkOptionToken(token, "-RST_N", 4)) {
             if (++i >= n)
                 return GVCmdExec::errorOption(GV_CMD_OPT_MISSING, token);
             rstNSet = true;
             rst_n   = options[i];
             command += " -reset_n " + rst_n;
+            if ((rstSet ? 1 : 0) + (rstNSet ? 1 : 0) + (continueSet ? 1 : 0) > 1)
+                return GVCmdExec::errorOption(GV_CMD_OPT_ILLEGAL, token);
             continue;
         }
-        if (myStrNCmp("-rst", token, 3) == 0) {
+        if (checkOptionToken(token, "-RST", 4)) {
             if (++i >= n)
                 return GVCmdExec::errorOption(GV_CMD_OPT_MISSING, token);
             rstSet = true;
             rst    = options[i];
             command += " -reset " + rst;
+            if ((rstSet ? 1 : 0) + (rstNSet ? 1 : 0) + (continueSet ? 1 : 0) > 1)
+                return GVCmdExec::errorOption(GV_CMD_OPT_ILLEGAL, token);
             continue;
         }
-        if (myStrNCmp("-clk", token, 1) == 0) {
+        if (checkOptionToken(token, "-Continue", 2)) {
+            continueSet = true;
+            command += " -continue";
+            if ((rstSet ? 1 : 0) + (rstNSet ? 1 : 0) + (continueSet ? 1 : 0) > 1)
+                return GVCmdExec::errorOption(GV_CMD_OPT_ILLEGAL, token);
+            continue;
+        }
+        if (checkOptionToken(token, "-CLK", 4)) {
             if (++i >= n)
                 return GVCmdExec::errorOption(GV_CMD_OPT_MISSING, token);
             clkSet = true;
@@ -98,7 +111,7 @@ GVCmdExecStatus GVRandomSimCmd::exec(const string& option) {
             command += " -clk " + clk;
             continue;
         }
-        if (myStrNCmp("-sim_cycle", token, 1) == 0) {
+        if (checkOptionToken(token, "-SIM_cycle", 4)) {
             if (++i >= n)
                 return GVCmdExec::errorOption(GV_CMD_OPT_MISSING, token);
             simCycleSet = true;
@@ -106,7 +119,7 @@ GVCmdExecStatus GVRandomSimCmd::exec(const string& option) {
             command += " -sim_cycle " + cycles;
             continue;
         }
-        if (myStrNCmp("-input", token, 1) == 0) {
+        if (checkOptionToken(token, "-INput", 3)) {
             if (++i >= n)
                 return GVCmdExec::errorOption(GV_CMD_OPT_MISSING, token);
             inFileName = options[i];
@@ -114,7 +127,7 @@ GVCmdExecStatus GVRandomSimCmd::exec(const string& option) {
             command += " -input " + inFileName;
             continue;
         }
-        if (myStrNCmp("-output", token, 1) == 0) {
+        if (checkOptionToken(token, "-OUTput", 4)) {
             if (++i >= n)
                 return GVCmdExec::errorOption(GV_CMD_OPT_MISSING, token);
             outFileName = options[i];
@@ -128,7 +141,7 @@ GVCmdExecStatus GVRandomSimCmd::exec(const string& option) {
             outfile.close();
             continue;
         }
-        if (myStrNCmp("-file", token, 1) == 0) {
+        if (checkOptionToken(token, "-File", 2)) {
             if (++i >= n)
                 return GVCmdExec::errorOption(GV_CMD_OPT_MISSING, token);
             stimulusFileName = options[i];
@@ -141,7 +154,7 @@ GVCmdExecStatus GVRandomSimCmd::exec(const string& option) {
             infile.close();
             continue;
         }
-        if (myStrNCmp("-vcd", token, 4) == 0) {
+        if (checkOptionToken(token, "-VCD", 4)) {
             if (++i >= n)
                 return GVCmdExec::errorOption(GV_CMD_OPT_MISSING, token);
             vcdFileName = options[i];
@@ -176,9 +189,9 @@ GVCmdExecStatus GVRandomSimCmd::exec(const string& option) {
 
 void GVRandomSimCmd::usage(const bool& verbose) const {
     gvMsg(GV_MSG_IFO)
-        << "Usage: RAndom Sim <-input file_name.v> [sim_cycle num_cycle_sim] "
-           "[-rst rst_name] [-rst_n rst_n_name] [-clk clk_name] "
-           "[-output out_file_name] [-v verbose print result] [-file stimulus]"
+        << "Usage: RAndom Sim <-INput file_name.v> [-SIM_cycle num_cycle_sim] "
+           "[-RST rst_name | -RST_N rst_n_name | -Continue] [-CLK clk_name] "
+           "[-OUTput out_file_name] [-Verbose_printing_results] [-File stimulus]"
         << endl;
 }
 

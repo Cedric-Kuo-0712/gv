@@ -76,7 +76,13 @@ public:
     CirPiGate* getPi(unsigned i) const { return _piList[i]; }
     CirPoGate* getPo(unsigned i) const { return _poList[i]; }
     CirAigGate* getAig(unsigned i) const { return _aigList[i]; }
-    GateVec& getFanouts(unsigned i) const { return _fanoutInfo[i]; }
+    GateVec& getFanouts(unsigned i) const {
+        // Gracefully handle cases where fanout info has not been
+        // initialized or the requested gate id is out of range.
+        static GateVec _emptyFanoutVec;
+        if (!_fanoutInfo || i >= _totGateList.size()) return _emptyFanoutVec;
+        return _fanoutInfo[i];
+    }
     string getFileName() const { return _fileName; }
     FileType getFileType() const { return _fileType; }
 

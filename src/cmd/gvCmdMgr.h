@@ -110,6 +110,7 @@ public:
 protected:
     void lexOptions(const string&, vector<string>&) const;
     bool lexSingleOption(const string&, string&, bool optional = true) const;
+    bool checkOptionToken(const string& token, const string& optionPattern, size_t mandatoryLen) const;
     GVCmdExecStatus errorOption(GVCmdOptionError err, const string& opt) const;
 
 private:

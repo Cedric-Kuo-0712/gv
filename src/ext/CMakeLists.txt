@@ -6,6 +6,12 @@ file(GLOB MY_SOURCES "./*.cc")
 # Make the plugin library with the .so suffix
 set(CMAKE_SHARED_LIBRARY_SUFFIX ".so")
 
+# random_sim shells out to compile .sim_main.cpp; use the same CXX as this build (not bare "g++").
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/sim_random_compile_config.h.in
+    ${CMAKE_CURRENT_BINARY_DIR}/sim_random_compile_config.h
+    @ONLY)
+
 # Compile each .cc file into a .so file
 foreach(source_file ${MY_SOURCES})
     # Extract the file name (without path and extension)
@@ -13,7 +19,7 @@ foreach(source_file ${MY_SOURCES})
     # Compile each .cc file into a .so file
     add_library(${name} SHARED ${source_file})
     set_property(TARGET ${name} PROPERTY POSITION_INDEPENDENT_CODE ON)
-    target_include_directories(${name} PRIVATE ${YOSYS_DIR})
+    target_include_directories(${name} PRIVATE ${YOSYS_DIR} ${CMAKE_CURRENT_BINARY_DIR})
     if(APPLE)
         target_link_options(${name} PRIVATE "-dynamic" "-undefined" "dynamic_lookup")
     else()

@@ -148,13 +148,11 @@ set(LIBYOSYS_PATH ${YOSYS_DIR}/libyosys.so)
 add_library(libyosys SHARED IMPORTED)
 set_target_properties(libyosys PROPERTIES IMPORTED_LOCATION ${LIBYOSYS_PATH})
 
-# * Git clone the Verilog-VCD-Parser repo at build time
 set(LIB_VCD_PARSER_NAME libverilog-vcd-parser.a)
 set(VCD_PARSER_PATCH_CMAKE vcd_parser_patch.cmake)
 ExternalProject_Add(
     vcd-parser
     GIT_REPOSITORY https://github.com/ben-marshall/verilog-vcd-parser.git
-    # GIT_TAG yosys-0.35
     GIT_PROGRESS TRUE
     PREFIX engines
     BUILD_IN_SOURCE 1
@@ -175,7 +173,6 @@ ExternalProject_Add(
         $(MAKE) all
     LOG_CONFIGURE ON
     LOG_INSTALL ON
-    # LOG_BUILD ON
 )
 ExternalProject_Get_Property(vcd-parser SOURCE_DIR)
 set(VCD_PARSER_DIR ${SOURCE_DIR})
@@ -285,7 +282,7 @@ target_link_libraries(${CMAKE_PROJECT_NAME} glucose)
 set(YOSYS_PLUGIN_PATH src/ext/)
 add_subdirectory(${YOSYS_PLUGIN_PATH})
 
-# Allow GV to be built only after all steps in the External project are completed
+# Allow GV to be built only after all steps in the External projects are completed
 add_dependencies(${CMAKE_PROJECT_NAME} engine-yosys)
 add_dependencies(${CMAKE_PROJECT_NAME} engine-abc)
 add_dependencies(${CMAKE_PROJECT_NAME} vcd-parser)
