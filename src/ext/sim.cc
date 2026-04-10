@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <time.h>
 
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -142,8 +143,13 @@ struct randomSim : public Pass {
                 strcmp(wire->name.c_str(), ("\\" + clk_name).c_str()))  // check the wire is not rst or clk
                 ++num_inputs;
         }
-        std::string command =
-            "yosys -qp \"read_verilog " + verilog_file_name + "; hierarchy -top " + top_module_name + "; write_cxxrtl .sim.cpp;\"";
+        std::string yosysExe = GV_YOSYS_BIN_PATH;
+        std::string readCmd  = "read_verilog";
+        if (verilog_file_name.size() >= 3 &&
+            verilog_file_name.compare(verilog_file_name.size() - 3, 3, ".sv") == 0)
+            readCmd += " -sv";
+        std::string command = "\"" + yosysExe + "\" -qp \"" + readCmd + " " + verilog_file_name +
+                              "; hierarchy -top " + top_module_name + "; write_cxxrtl .sim.cpp;\"";
         run_command(command);
         std::string wire_name;
         std::string module_name;
@@ -159,6 +165,14 @@ struct randomSim : public Pass {
         ofs << "#include <vector>\n";
         ofs << "#include <backends/cxxrtl/cxxrtl_vcd.h>\n";
         module_name = log_id(design->top_module()->name);
+        // CXXRTL escapes Verilog underscores in C++ type names (e.g. vending_machine -> p_vending__machine).
+        std::string cxxrtlModule;
+        for (char c : module_name) {
+            if (c == '_')
+                cxxrtlModule += "__";
+            else
+                cxxrtlModule += c;
+        }
         ofs << "#include \".sim.cpp\"\n";
         ofs << "using namespace std;\n";
         ofs << " int main()\n";
@@ -203,7 +217,7 @@ struct randomSim : public Pass {
             ofs << "ofstream ofs;\n";
             ofs << "ofs.open(\"" << output_file_name << "\");\n";
         }
-        ofs << "     cxxrtl_design::p_" + module_name + " top;\n";
+        ofs << "     cxxrtl_design::p_" + cxxrtlModule + " top;\n";
         ofs << "long long base_cycle = 0;\n";
         if (continue_set) {
             ofs << "const char* state_file = \".sim_state.txt\";\n";
@@ -454,12 +468,25 @@ struct randomSim : public Pass {
         compileCmd += GV_RANDOM_SIM_CXX;
         compileCmd += "\" ";
         compileCmd += GV_RANDOM_SIM_CXXFLAGS;
-        compileCmd += " -g -O3 -std=c++14 ";
+        compileCmd += " -g -O3 -std=c++17 ";
 #ifdef __APPLE__
         compileCmd += "-stdlib=libc++ ";
 #endif
-        compileCmd += "-I `" + yosysConfig + " --datdir`/include "
-                      "-w "
+        // In-tree Yosys (GV ExternalProject) keeps headers under the repo root next to `yosys`;
+        // `yosys-config --datdir` may still point at /usr/local/share/yosys from the Makefile stub.
+        std::string cxxrtlInclude;
+        if (slashPos != std::string::npos) {
+            const std::string yosysRoot = yosysBin.substr(0, slashPos);
+            std::ifstream   cxxrtlProbe(yosysRoot + "/backends/cxxrtl/cxxrtl_vcd.h");
+            if (cxxrtlProbe.good()) {
+                cxxrtlInclude = "-I \"" + yosysRoot + "\" ";
+                cxxrtlProbe.close();
+            }
+        }
+        if (cxxrtlInclude.empty())
+            cxxrtlInclude = "-I `" + yosysConfig + " --datdir`/include ";
+        compileCmd += cxxrtlInclude;
+        compileCmd += "-w "
                       ".sim_main.cpp -o .tb ";
 
         int compileRet = run_command(compileCmd);

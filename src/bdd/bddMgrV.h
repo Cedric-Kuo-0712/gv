@@ -109,6 +109,8 @@ public:
     BddNodeV restrict(const BddNodeV&, const BddNodeV&);
     void runPCheckProperty(const string& name, BddNodeV property);
     bool isPFixed() const { return _isFixed; }
+    /// Number of image iterations actually executed in the last buildPImage() call.
+    unsigned getPImageStepCount() const { return _pimageStepsRun; }
     BddNodeV getPInitState() const { return _initState; }
     BddNodeV getPTr() const { return _tr; }
     BddNodeV getPTri() const { return _tri; }
@@ -138,7 +140,8 @@ private:
     BddMap _bddMap;
 
     // For prove
-    bool _isFixed;
+    bool     _isFixed;
+    unsigned _pimageStepsRun = 0;
     BddNodeV _initState;
     BddNodeV _tr;
     BddNodeV _tri;

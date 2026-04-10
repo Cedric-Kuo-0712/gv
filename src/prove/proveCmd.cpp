@@ -115,7 +115,9 @@ void PTransRelationCmd::help() const {
 }
 
 //----------------------------------------------------------------------
-//    PIMAGe [-Next <(int numTimeframes)>] [(string varName)]
+//    PIMAGe [-Next <(int numTimeframes)> | -UntilFixed <cap>] [(string varName)]
+//    (-UntilFixed is an alias for -Next: run up to <cap> image steps but stop
+//     early when reachability saturates; use a large cap to "run until fixed".)
 //----------------------------------------------------------------------
 GVCmdExecStatus
 PImageCmd::exec(const string& option) {
@@ -129,40 +131,62 @@ PImageCmd::exec(const string& option) {
         return GV_CMD_EXEC_ERROR;
     }
 
-    int level = 1;
+    int  level         = 1;
+    bool levelExplicit = false;
     string name;
     vector<string> options;
     GVCmdExec::lexOptions(option, options);
 
     for (size_t i = 0, n = options.size(); i < n; ++i)
-        if (!myStrNCmp("-Next", options[i], 2))
+        if (!myStrNCmp("-Next", options[i], 2) ||
+            !myStrNCmp("-UntilFixed", options[i], 7)) {
             if (++i < n) {
                 if (!myStr2Int(options[i], level) || level <= 0)
                     return GVCmdExec::errorOption(GV_CMD_OPT_ILLEGAL,
                                                   options[i]);
+                if (levelExplicit)
+                    return GVCmdExec::errorOption(GV_CMD_OPT_EXTRA,
+                                                  options[i - 1]);
+                levelExplicit = true;
             } else
                 return GVCmdExec::errorOption(GV_CMD_OPT_MISSING,
                                               options[i - 1]);
-        else if (name.empty()) {
+        } else if (name.empty()) {
             name = options[i];
             if (!isValidVarName(name))
                 return GVCmdExec::errorOption(GV_CMD_OPT_ILLEGAL, name);
         } else return GVCmdExec::errorOption(GV_CMD_OPT_ILLEGAL, options[i]);
     bddMgrV->buildPImage(level);
+    const unsigned steps = bddMgrV->getPImageStepCount();
+    if (bddMgrV->isPFixed())
+        gvMsg(GV_MSG_IFO)
+            << "[Prove] Reachability fixed point after " << steps
+            << " image step(s): no new states in the last step (complete reach "
+               "set for this TR, within step cap)."
+            << endl;
+    else
+        gvMsg(GV_MSG_IFO)
+            << "[Prove] Fixed point not reached: ran " << steps << " image step(s)"
+            << " (cap was " << level
+            << "); increase -next / -untilFixed cap or run PIMAGe again to "
+               "extend reach."
+            << endl;
     if (!name.empty())
         bddMgrV->forceAddBddNodeV(name, bddMgrV->getPReachState()());
     return GV_CMD_EXEC_DONE;
 }
 
 void PImageCmd::usage(const bool& verbose) const {
-    cout
-        << "Usage: PIMAGe [-Next <(int numTimeframes)>] [(string varName)]"
-        << endl;
+    cout << "Usage: PIMAGe [-Next <(int numTimeframes)> | "
+            "-UntilFixed <(int maxSteps)>] [(string varName)]"
+         << endl;
 }
 
 void PImageCmd::help() const {
     cout << setw(20) << left << "PIMAGe: "
-         << "build the next state images in BDDs" << endl;
+         << "build the next state images in BDDs (stops early at reachability "
+            "fixed point; -untilFixed <cap> = same as -next <cap>, for clarity)"
+         << endl;
 }
 
 //----------------------------------------------------------------------
@@ -209,12 +233,23 @@ PCheckPropertyCmd::exec(const string& option) {
         // netId = gvNtkMgr->getOutput(num);
     }
 
-    // BddNodeV monitor = bddMgrV->getBddNodeV(netId.id);
-    BddNodeV monitor = bddMgrV->getBddNodeV(cirMgr->getPo(num)->getGid());
+    BddNodeV monitor;
+    string monitorName;
+    if (isNet) {
+        gv::cir::CirGate* g = cirMgr->getGate((unsigned)num);
+        if (!g) {
+            gvMsg(GV_MSG_ERR) << "Net with Id " << num
+                              << " does NOT Exist in Current Ntk !!" << endl;
+            return GVCmdExec::errorOption(GV_CMD_OPT_ILLEGAL, options[1]);
+        }
+        monitor     = bddMgrV->getBddNodeV(g->getGid());
+        monitorName = "net_" + to_string(num);
+    } else {
+        monitor     = bddMgrV->getBddNodeV(cirMgr->getPo(num)->getGid());
+        monitorName = cirMgr->getPo(num)->getName();
+    }
     assert(monitor());
-    // bddMgrV->runPCheckProperty(gvNtkMgr->getNetNameFromId(netId.id), monitor);
-    string mStr = "monitor";
-    bddMgrV->runPCheckProperty(cirMgr->getPo(num)->getName(), monitor);
+    bddMgrV->runPCheckProperty(monitorName, monitor);
 
     return GV_CMD_EXEC_DONE;
 }

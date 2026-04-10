@@ -278,6 +278,16 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/sat
 # target_link_libraries(${CMAKE_PROJECT_NAME} libabc libyosys readline gmp)
 find_package(Threads REQUIRED)
 target_link_libraries(${CMAKE_PROJECT_NAME} libabc readline gmp dl Threads::Threads)
+# Ubuntu/Debian readline may require explicit terminfo/ncurses linkage.
+find_library(TINFO_LIB tinfo)
+if(TINFO_LIB)
+    target_link_libraries(${CMAKE_PROJECT_NAME} ${TINFO_LIB})
+else()
+    find_library(NCURSES_LIB ncurses)
+    if(NCURSES_LIB)
+        target_link_libraries(${CMAKE_PROJECT_NAME} ${NCURSES_LIB})
+    endif()
+endif()
 target_link_libraries(${CMAKE_PROJECT_NAME} ${LIBYOSYS_PATH})
 # * Link the filesystem library
 # target_link_libraries(${CMAKE_PROJECT_NAME} stdc++fs)
