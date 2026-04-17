@@ -78,6 +78,8 @@ public:
 
     // Other BDD operations
     BddNodeV exist(unsigned l) const;
+    /// True iff this BDD depends on variable at BDD level \p level (1..nin).
+    bool dependsOnLevel(unsigned level) const;
     BddNodeV nodeMove(unsigned fLevel, unsigned tLevel, bool& isMoved) const;
     size_t countCube() const;
     BddNodeV getCube(size_t ith = 0) const;

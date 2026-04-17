@@ -145,6 +145,15 @@ private:
     BddNodeV _initState;
     BddNodeV _tr;
     BddNodeV _tri;
+    bool _useConjTrPartition = false;
+    bool _useTrEarlyQuant   = false;
+    vector<BddNodeV> _trParts;
+    /// Processing order of indices into _trParts (permutation of 0..n-1).
+    vector<unsigned> _trPartPerm;
+    /// For each TR block: PI indices (0..#PI-1) that appear in that block.
+    vector<vector<unsigned>> _trPartPiDeps;
+    /// For each TR block: latch indices (0..#FF-1) whose CS var appears in that block.
+    vector<vector<unsigned>> _trPartCsDeps;
     vector<BddNodeV> _reachStates;
 
     void reset();

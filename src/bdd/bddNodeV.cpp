@@ -203,6 +203,12 @@ BddNodeV::exist(unsigned l) const {
     return existRecur(l, existMap);
 }
 
+bool
+BddNodeV::dependsOnLevel(unsigned level) const {
+    if (level == 0 || _nodeV == 0 || isTerminal()) return false;
+    return containNode(level, level);
+}
+
 BddNodeV
 BddNodeV::existRecur(unsigned l, map<size_t, size_t>& existMap) const {
     if (isTerminal()) return (*this);
